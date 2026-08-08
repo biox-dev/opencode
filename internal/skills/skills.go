@@ -247,7 +247,7 @@ func BuildPromptSection(paths []string) string {
 
 	return "# Skills Information\n" +
 		"Skills may be available for specialized tasks. Prefer using relevant skills when they match the user's request.\n" +
-		"When a skill is needed, call the tool `skill_load` with the selected skill name, read the full SKILL.md content, then follow it.\n" +
+		"When skills are needed, call `skill_list` first to inspect available options, then call `skill_load` for the selected skill name, read the full SKILL.md content, and follow it.\n" +
 		xml
 }
 
