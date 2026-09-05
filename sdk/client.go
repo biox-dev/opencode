@@ -2,20 +2,24 @@ package sdk
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
-	appcore "github.com/biox-dev/opencode/internal/app"
 	"github.com/biox-dev/opencode/internal/config"
-	"github.com/biox-dev/opencode/internal/db"
+	"github.com/biox-dev/opencode/internal/history"
 	llmagent "github.com/biox-dev/opencode/internal/llm/agent"
+	"github.com/biox-dev/opencode/internal/lsp"
 	"github.com/biox-dev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/permission"
 	"github.com/biox-dev/opencode/internal/pubsub"
 	"github.com/biox-dev/opencode/internal/session"
+	"github.com/google/uuid"
 )
 
 type Role string
@@ -114,13 +118,15 @@ type Options struct {
 }
 
 type Client struct {
-	app    *appcore.App
-	conn   *sql.DB
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	mu          sync.Mutex
+	ctx         context.Context
+	cancel      context.CancelFunc
 	autoApprove bool
+
+	permissions permission.Service
+	sessions    session.Service
+	messages    message.Service
+	history     history.Service
+	coderAgent  llmagent.Service
 }
 
 func NewClient(ctx context.Context, opts Options) (*Client, error) {
@@ -140,25 +146,39 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 		return nil, fmt.Errorf("load opencode config: %w", err)
 	}
 
-	conn, err := db.Connect()
-	if err != nil {
-		return nil, fmt.Errorf("connect opencode db: %w", err)
-	}
-
 	appCtx, cancel := context.WithCancel(ctx)
-	appInstance, err := appcore.New(appCtx, conn)
+
+	permissionsSvc := permission.NewPermissionService()
+	sessionsSvc := newInMemorySessionService()
+	messagesSvc := newInMemoryMessageService()
+	historySvc := newInMemoryHistoryService()
+
+	agentSvc, err := llmagent.NewAgent(
+		config.AgentCoder,
+		sessionsSvc,
+		messagesSvc,
+		llmagent.CoderAgentTools(
+			permissionsSvc,
+			sessionsSvc,
+			messagesSvc,
+			historySvc,
+			map[string]*lsp.Client{},
+		),
+	)
 	if err != nil {
 		cancel()
-		_ = conn.Close()
-		return nil, fmt.Errorf("create opencode app: %w", err)
+		return nil, fmt.Errorf("create opencode agent: %w", err)
 	}
 
 	return &Client{
-		app:         appInstance,
-		conn:        conn,
 		ctx:         appCtx,
 		cancel:      cancel,
 		autoApprove: opts.AutoApprove,
+		permissions: permissionsSvc,
+		sessions:    sessionsSvc,
+		messages:    messagesSvc,
+		history:     historySvc,
+		coderAgent:  agentSvc,
 	}, nil
 }
 
@@ -167,21 +187,27 @@ func (c *Client) Close() error {
 		return nil
 	}
 	c.cancel()
-	c.app.Shutdown()
-	if c.conn != nil {
-		return c.conn.Close()
+	shutdown := func(target any) {
+		if svc, ok := target.(interface{ Shutdown() }); ok {
+			svc.Shutdown()
+		}
 	}
+	shutdown(c.permissions)
+	shutdown(c.sessions)
+	shutdown(c.messages)
+	shutdown(c.history)
+	shutdown(c.coderAgent)
 	return nil
 }
 
 func (c *Client) CreateSession(ctx context.Context, title string) (*Session, error) {
-	if c == nil || c.app == nil {
+	if c == nil || c.coderAgent == nil {
 		return nil, errors.New("opencode sdk client is not initialized")
 	}
 	if strings.TrimSpace(title) == "" {
 		title = "SDK Session"
 	}
-	sess, err := c.app.Sessions.Create(ctx, title)
+	sess, err := c.sessions.Create(ctx, title)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +216,7 @@ func (c *Client) CreateSession(ctx context.Context, title string) (*Session, err
 }
 
 func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler StreamHandler) (*RunResult, error) {
-	if c == nil || c.app == nil {
+	if c == nil || c.coderAgent == nil {
 		return nil, errors.New("opencode sdk client is not initialized")
 	}
 	if ctx == nil {
@@ -208,21 +234,22 @@ func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler 
 
 	shouldAutoApprove := c.autoApprove || req.AutoApprove
 	if shouldAutoApprove {
-		c.app.Permissions.AutoApproveSession(sess.ID)
+		c.permissions.AutoApproveSession(sess.ID)
 	}
 
 	if handler != nil {
 		handler(Event{Type: EventSessionCreated, SessionID: sess.ID})
 	}
 
-	messageSub := c.app.Messages.Subscribe(ctx)
-	done, err := c.app.CoderAgent.Run(ctx, sess.ID, prompt)
+	messageSub := c.messages.Subscribe(ctx)
+	done, err := c.coderAgent.Run(ctx, sess.ID, prompt)
 	if err != nil {
 		return nil, err
 	}
 
 	seenText := map[string]int{}
 	seenThinking := map[string]int{}
+	finalAssistantSeenInMessageStream := map[string]bool{}
 	for {
 		select {
 		case msgEvent, ok := <-messageSub:
@@ -235,6 +262,9 @@ func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler 
 			snapshot := toSnapshot(msgEvent.Payload)
 			emitMessageEvent(handler, sess.ID, msgEvent.Type, snapshot)
 			emitAssistantDeltaEvents(handler, sess.ID, snapshot, seenText, seenThinking)
+			if msgEvent.Type == pubsub.UpdatedEvent && snapshot.Role == RoleAssistant && snapshot.Finished {
+				finalAssistantSeenInMessageStream[snapshot.ID] = true
+			}
 
 		case agentResult, ok := <-done:
 			if !ok {
@@ -250,7 +280,11 @@ func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler 
 			}
 
 			finalSnapshot := toSnapshot(agentResult.Message)
-			emit(handler, Event{Type: EventAgentCompleted, SessionID: sess.ID, Message: &finalSnapshot})
+			completedEvent := Event{Type: EventAgentCompleted, SessionID: sess.ID}
+			if !finalAssistantSeenInMessageStream[finalSnapshot.ID] {
+				completedEvent.Message = &finalSnapshot
+			}
+			emit(handler, completedEvent)
 			return &RunResult{SessionID: sess.ID, Message: finalSnapshot}, nil
 
 		case <-ctx.Done():
@@ -314,7 +348,7 @@ func emit(handler StreamHandler, event Event) {
 
 func (c *Client) ensureSession(ctx context.Context, req RunRequest) (session.Session, error) {
 	if strings.TrimSpace(req.SessionID) != "" {
-		sess, err := c.app.Sessions.Get(ctx, req.SessionID)
+		sess, err := c.sessions.Get(ctx, req.SessionID)
 		if err == nil {
 			return sess, nil
 		}
@@ -323,7 +357,7 @@ func (c *Client) ensureSession(ctx context.Context, req RunRequest) (session.Ses
 	if title == "" {
 		title = "SDK Session"
 	}
-	return c.app.Sessions.Create(ctx, title)
+	return c.sessions.Create(ctx, title)
 }
 
 func toSession(sess session.Session) Session {
@@ -383,4 +417,469 @@ func toSnapshot(msg message.Message) MessageSnapshot {
 		CreatedAt:    msg.CreatedAt,
 		UpdatedAt:    msg.UpdatedAt,
 	}
+}
+
+type inMemorySessionService struct {
+	*pubsub.Broker[session.Session]
+	mu    sync.RWMutex
+	items map[string]session.Session
+	order []string
+}
+
+func newInMemorySessionService() *inMemorySessionService {
+	return &inMemorySessionService{
+		Broker: pubsub.NewBroker[session.Session](),
+		items:  make(map[string]session.Session),
+		order:  make([]string, 0),
+	}
+}
+
+func (s *inMemorySessionService) Create(ctx context.Context, title string) (session.Session, error) {
+	_ = ctx
+	now := time.Now().Unix()
+	item := session.Session{
+		ID:        uuid.New().String(),
+		Title:     title,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	s.mu.Lock()
+	s.items[item.ID] = item
+	s.order = append(s.order, item.ID)
+	s.mu.Unlock()
+
+	s.Publish(pubsub.CreatedEvent, item)
+	return item, nil
+}
+
+func (s *inMemorySessionService) CreateTitleSession(ctx context.Context, parentSessionID string) (session.Session, error) {
+	_ = ctx
+	now := time.Now().Unix()
+	item := session.Session{
+		ID:              "title-" + parentSessionID,
+		ParentSessionID: parentSessionID,
+		Title:           "Generate a title",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+
+	s.mu.Lock()
+	if _, exists := s.items[item.ID]; exists {
+		s.mu.Unlock()
+		return session.Session{}, fmt.Errorf("session already exists: %s", item.ID)
+	}
+	s.items[item.ID] = item
+	s.order = append(s.order, item.ID)
+	s.mu.Unlock()
+
+	s.Publish(pubsub.CreatedEvent, item)
+	return item, nil
+}
+
+func (s *inMemorySessionService) CreateTaskSession(ctx context.Context, toolCallID, parentSessionID, title string) (session.Session, error) {
+	_ = ctx
+	now := time.Now().Unix()
+	item := session.Session{
+		ID:              toolCallID,
+		ParentSessionID: parentSessionID,
+		Title:           title,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+
+	s.mu.Lock()
+	if _, exists := s.items[item.ID]; exists {
+		s.mu.Unlock()
+		return session.Session{}, fmt.Errorf("session already exists: %s", item.ID)
+	}
+	s.items[item.ID] = item
+	s.order = append(s.order, item.ID)
+	s.mu.Unlock()
+
+	s.Publish(pubsub.CreatedEvent, item)
+	return item, nil
+}
+
+func (s *inMemorySessionService) Get(ctx context.Context, id string) (session.Session, error) {
+	_ = ctx
+	s.mu.RLock()
+	item, ok := s.items[id]
+	s.mu.RUnlock()
+	if !ok {
+		return session.Session{}, fmt.Errorf("session not found: %s", id)
+	}
+	return item, nil
+}
+
+func (s *inMemorySessionService) List(ctx context.Context) ([]session.Session, error) {
+	_ = ctx
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]session.Session, 0, len(s.order))
+	for _, id := range s.order {
+		if item, ok := s.items[id]; ok {
+			result = append(result, item)
+		}
+	}
+	return result, nil
+}
+
+func (s *inMemorySessionService) Save(ctx context.Context, item session.Session) (session.Session, error) {
+	_ = ctx
+	s.mu.Lock()
+	_, exists := s.items[item.ID]
+	if !exists {
+		s.mu.Unlock()
+		return session.Session{}, fmt.Errorf("session not found: %s", item.ID)
+	}
+	if item.CreatedAt == 0 {
+		item.CreatedAt = s.items[item.ID].CreatedAt
+	}
+	item.UpdatedAt = time.Now().Unix()
+	s.items[item.ID] = item
+	s.mu.Unlock()
+
+	s.Publish(pubsub.UpdatedEvent, item)
+	return item, nil
+}
+
+func (s *inMemorySessionService) Delete(ctx context.Context, id string) error {
+	_ = ctx
+	s.mu.Lock()
+	item, exists := s.items[id]
+	if !exists {
+		s.mu.Unlock()
+		return fmt.Errorf("session not found: %s", id)
+	}
+	delete(s.items, id)
+	for i, v := range s.order {
+		if v == id {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			break
+		}
+	}
+	s.mu.Unlock()
+
+	s.Publish(pubsub.DeletedEvent, item)
+	return nil
+}
+
+type inMemoryMessageService struct {
+	*pubsub.Broker[message.Message]
+	mu        sync.RWMutex
+	items     map[string]message.Message
+	bySession map[string][]string
+}
+
+func newInMemoryMessageService() *inMemoryMessageService {
+	return &inMemoryMessageService{
+		Broker:    pubsub.NewBroker[message.Message](),
+		items:     make(map[string]message.Message),
+		bySession: make(map[string][]string),
+	}
+}
+
+func (s *inMemoryMessageService) Create(ctx context.Context, sessionID string, params message.CreateMessageParams) (message.Message, error) {
+	_ = ctx
+	parts := make([]message.ContentPart, 0, len(params.Parts)+1)
+	parts = append(parts, params.Parts...)
+	if params.Role != message.Assistant {
+		parts = append(parts, message.Finish{Reason: "stop"})
+	}
+	now := time.Now().Unix()
+	msg := message.Message{
+		ID:        uuid.New().String(),
+		Role:      params.Role,
+		SessionID: sessionID,
+		Parts:     parts,
+		Model:     params.Model,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	s.mu.Lock()
+	s.items[msg.ID] = msg
+	s.bySession[sessionID] = append(s.bySession[sessionID], msg.ID)
+	s.mu.Unlock()
+
+	s.Publish(pubsub.CreatedEvent, msg)
+	return msg, nil
+}
+
+func (s *inMemoryMessageService) Update(ctx context.Context, msg message.Message) error {
+	_ = ctx
+	s.mu.Lock()
+	current, ok := s.items[msg.ID]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("message not found: %s", msg.ID)
+	}
+	if msg.CreatedAt == 0 {
+		msg.CreatedAt = current.CreatedAt
+	}
+	msg.UpdatedAt = time.Now().Unix()
+	s.items[msg.ID] = msg
+	s.mu.Unlock()
+
+	s.Publish(pubsub.UpdatedEvent, msg)
+	return nil
+}
+
+func (s *inMemoryMessageService) Get(ctx context.Context, id string) (message.Message, error) {
+	_ = ctx
+	s.mu.RLock()
+	msg, ok := s.items[id]
+	s.mu.RUnlock()
+	if !ok {
+		return message.Message{}, fmt.Errorf("message not found: %s", id)
+	}
+	return msg, nil
+}
+
+func (s *inMemoryMessageService) List(ctx context.Context, sessionID string) ([]message.Message, error) {
+	_ = ctx
+	s.mu.RLock()
+	ids := append([]string(nil), s.bySession[sessionID]...)
+	result := make([]message.Message, 0, len(ids))
+	for _, id := range ids {
+		if msg, ok := s.items[id]; ok {
+			result = append(result, msg)
+		}
+	}
+	s.mu.RUnlock()
+
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].CreatedAt < result[j].CreatedAt
+	})
+	return result, nil
+}
+
+func (s *inMemoryMessageService) Delete(ctx context.Context, id string) error {
+	_ = ctx
+	s.mu.Lock()
+	msg, ok := s.items[id]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("message not found: %s", id)
+	}
+	delete(s.items, id)
+	ids := s.bySession[msg.SessionID]
+	for i, v := range ids {
+		if v == id {
+			s.bySession[msg.SessionID] = append(ids[:i], ids[i+1:]...)
+			break
+		}
+	}
+	s.mu.Unlock()
+
+	s.Publish(pubsub.DeletedEvent, msg)
+	return nil
+}
+
+func (s *inMemoryMessageService) DeleteSessionMessages(ctx context.Context, sessionID string) error {
+	msgs, err := s.List(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, msg := range msgs {
+		if err := s.Delete(ctx, msg.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type inMemoryHistoryService struct {
+	*pubsub.Broker[history.File]
+	mu    sync.RWMutex
+	items map[string]history.File
+}
+
+func newInMemoryHistoryService() *inMemoryHistoryService {
+	return &inMemoryHistoryService{
+		Broker: pubsub.NewBroker[history.File](),
+		items:  make(map[string]history.File),
+	}
+}
+
+func (s *inMemoryHistoryService) Create(ctx context.Context, sessionID, path, content string) (history.File, error) {
+	_ = ctx
+	return s.createWithVersion(sessionID, path, content, history.InitialVersion), nil
+}
+
+func (s *inMemoryHistoryService) CreateVersion(ctx context.Context, sessionID, path, content string) (history.File, error) {
+	_ = ctx
+
+	latest := s.latestVersionForPath(path)
+	if latest == "" {
+		return s.createWithVersion(sessionID, path, content, history.InitialVersion), nil
+	}
+	if latest == history.InitialVersion {
+		return s.createWithVersion(sessionID, path, content, "v1"), nil
+	}
+	if strings.HasPrefix(latest, "v") {
+		if n, err := strconv.Atoi(strings.TrimPrefix(latest, "v")); err == nil {
+			return s.createWithVersion(sessionID, path, content, fmt.Sprintf("v%d", n+1)), nil
+		}
+	}
+	return s.createWithVersion(sessionID, path, content, fmt.Sprintf("v%d", time.Now().Unix())), nil
+}
+
+func (s *inMemoryHistoryService) Get(ctx context.Context, id string) (history.File, error) {
+	_ = ctx
+	s.mu.RLock()
+	item, ok := s.items[id]
+	s.mu.RUnlock()
+	if !ok {
+		return history.File{}, fmt.Errorf("history file not found: %s", id)
+	}
+	return item, nil
+}
+
+func (s *inMemoryHistoryService) GetByPathAndSession(ctx context.Context, path, sessionID string) (history.File, error) {
+	_ = ctx
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var newest history.File
+	found := false
+	for _, item := range s.items {
+		if item.Path == path && item.SessionID == sessionID {
+			if !found || item.CreatedAt > newest.CreatedAt {
+				newest = item
+				found = true
+			}
+		}
+	}
+	if !found {
+		return history.File{}, fmt.Errorf("history file not found for path=%s session=%s", path, sessionID)
+	}
+	return newest, nil
+}
+
+func (s *inMemoryHistoryService) ListBySession(ctx context.Context, sessionID string) ([]history.File, error) {
+	_ = ctx
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]history.File, 0)
+	for _, item := range s.items {
+		if item.SessionID == sessionID {
+			result = append(result, item)
+		}
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].CreatedAt > result[j].CreatedAt
+	})
+	return result, nil
+}
+
+func (s *inMemoryHistoryService) ListLatestSessionFiles(ctx context.Context, sessionID string) ([]history.File, error) {
+	_ = ctx
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	byPath := make(map[string]history.File)
+	for _, item := range s.items {
+		if item.SessionID != sessionID {
+			continue
+		}
+		curr, ok := byPath[item.Path]
+		if !ok || item.CreatedAt > curr.CreatedAt {
+			byPath[item.Path] = item
+		}
+	}
+
+	result := make([]history.File, 0, len(byPath))
+	for _, item := range byPath {
+		result = append(result, item)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].CreatedAt > result[j].CreatedAt
+	})
+	return result, nil
+}
+
+func (s *inMemoryHistoryService) Update(ctx context.Context, file history.File) (history.File, error) {
+	_ = ctx
+	s.mu.Lock()
+	current, ok := s.items[file.ID]
+	if !ok {
+		s.mu.Unlock()
+		return history.File{}, fmt.Errorf("history file not found: %s", file.ID)
+	}
+	if file.CreatedAt == 0 {
+		file.CreatedAt = current.CreatedAt
+	}
+	file.UpdatedAt = time.Now().Unix()
+	s.items[file.ID] = file
+	s.mu.Unlock()
+
+	s.Publish(pubsub.UpdatedEvent, file)
+	return file, nil
+}
+
+func (s *inMemoryHistoryService) Delete(ctx context.Context, id string) error {
+	_ = ctx
+	s.mu.Lock()
+	item, ok := s.items[id]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("history file not found: %s", id)
+	}
+	delete(s.items, id)
+	s.mu.Unlock()
+
+	s.Publish(pubsub.DeletedEvent, item)
+	return nil
+}
+
+func (s *inMemoryHistoryService) DeleteSessionFiles(ctx context.Context, sessionID string) error {
+	files, err := s.ListBySession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if err := s.Delete(ctx, file.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *inMemoryHistoryService) latestVersionForPath(path string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	latestTs := int64(0)
+	latestVersion := ""
+	for _, item := range s.items {
+		if item.Path == path && item.CreatedAt >= latestTs {
+			latestTs = item.CreatedAt
+			latestVersion = item.Version
+		}
+	}
+	return latestVersion
+}
+
+func (s *inMemoryHistoryService) createWithVersion(sessionID, path, content, version string) history.File {
+	now := time.Now().Unix()
+	item := history.File{
+		ID:        uuid.New().String(),
+		SessionID: sessionID,
+		Path:      path,
+		Content:   content,
+		Version:   version,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	s.mu.Lock()
+	s.items[item.ID] = item
+	s.mu.Unlock()
+
+	s.Publish(pubsub.CreatedEvent, item)
+	return item
 }
