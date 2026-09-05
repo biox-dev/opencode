@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/gobravedev/opencode/cmd"
-	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/cmd"
+	"github.com/biox-dev/opencode/internal/logging"
 )
 
 func main() {

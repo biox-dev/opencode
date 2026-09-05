@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/logging"
 )
 
 // Write writes an LSP message to the given writer

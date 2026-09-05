@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/gobravedev/opencode/internal/db"
-	"github.com/gobravedev/opencode/internal/llm/models"
-	"github.com/gobravedev/opencode/internal/pubsub"
+	"github.com/biox-dev/opencode/internal/db"
+	"github.com/biox-dev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/pubsub"
 )
 
 type CreateMessageParams struct {

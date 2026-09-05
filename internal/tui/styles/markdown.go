@@ -4,7 +4,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gobravedev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/tui/theme"
 )
 
 const defaultMargin = 1

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/llm/tools/shell"
-	"github.com/gobravedev/opencode/internal/permission"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/llm/tools/shell"
+	"github.com/biox-dev/opencode/internal/permission"
 )
 
 type BashParams struct {

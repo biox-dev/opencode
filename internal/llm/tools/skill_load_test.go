@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

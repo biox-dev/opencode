@@ -9,17 +9,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/db"
-	"github.com/gobravedev/opencode/internal/format"
-	"github.com/gobravedev/opencode/internal/history"
-	"github.com/gobravedev/opencode/internal/llm/agent"
-	"github.com/gobravedev/opencode/internal/logging"
-	"github.com/gobravedev/opencode/internal/lsp"
-	"github.com/gobravedev/opencode/internal/message"
-	"github.com/gobravedev/opencode/internal/permission"
-	"github.com/gobravedev/opencode/internal/session"
-	"github.com/gobravedev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/db"
+	"github.com/biox-dev/opencode/internal/format"
+	"github.com/biox-dev/opencode/internal/history"
+	"github.com/biox-dev/opencode/internal/llm/agent"
+	"github.com/biox-dev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/lsp"
+	"github.com/biox-dev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/permission"
+	"github.com/biox-dev/opencode/internal/session"
+	"github.com/biox-dev/opencode/internal/tui/theme"
 )
 
 type App struct {

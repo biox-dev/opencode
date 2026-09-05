@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/config"
 )
 
 type PersistentShell struct {

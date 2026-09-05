@@ -70,7 +70,7 @@ paru -S opencode-ai-bin
 ### Using Go
 
 ```bash
-go install github.com/gobravedev/opencode@latest
+go install github.com/biox-dev/opencode@latest
 ```
 
 ## Configuration
@@ -664,7 +664,7 @@ You can also configure a self-hosted model in the configuration file under the `
 
 ```bash
 # Clone the repository
-git clone https://github.com/gobravedev/opencode.git
+git clone https://github.com/biox-dev/opencode.git
 cd opencode
 
 # Build

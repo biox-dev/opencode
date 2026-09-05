@@ -15,8 +15,8 @@ import (
 	"github.com/aymanbagabas/go-udiff"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/tui/theme"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 

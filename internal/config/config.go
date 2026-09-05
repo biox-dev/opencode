@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gobravedev/opencode/internal/llm/models"
-	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/logging"
 	"github.com/spf13/viper"
 )
 

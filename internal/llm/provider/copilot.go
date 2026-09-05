@@ -13,11 +13,11 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/shared"
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/llm/models"
-	toolsPkg "github.com/gobravedev/opencode/internal/llm/tools"
-	"github.com/gobravedev/opencode/internal/logging"
-	"github.com/gobravedev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/llm/models"
+	toolsPkg "github.com/biox-dev/opencode/internal/llm/tools"
+	"github.com/biox-dev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/message"
 )
 
 type copilotOptions struct {

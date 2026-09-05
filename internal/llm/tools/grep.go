@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/fileutil"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/fileutil"
 )
 
 type GrepParams struct {

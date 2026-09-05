@@ -10,14 +10,14 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gobravedev/opencode/internal/app"
-	"github.com/gobravedev/opencode/internal/message"
-	"github.com/gobravedev/opencode/internal/pubsub"
-	"github.com/gobravedev/opencode/internal/session"
-	"github.com/gobravedev/opencode/internal/tui/components/dialog"
-	"github.com/gobravedev/opencode/internal/tui/styles"
-	"github.com/gobravedev/opencode/internal/tui/theme"
-	"github.com/gobravedev/opencode/internal/tui/util"
+	"github.com/biox-dev/opencode/internal/app"
+	"github.com/biox-dev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/pubsub"
+	"github.com/biox-dev/opencode/internal/session"
+	"github.com/biox-dev/opencode/internal/tui/components/dialog"
+	"github.com/biox-dev/opencode/internal/tui/styles"
+	"github.com/biox-dev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/tui/util"
 )
 
 type cacheItem struct {

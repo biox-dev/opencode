@@ -7,16 +7,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/llm/models"
-	"github.com/gobravedev/opencode/internal/lsp"
-	"github.com/gobravedev/opencode/internal/lsp/protocol"
-	"github.com/gobravedev/opencode/internal/pubsub"
-	"github.com/gobravedev/opencode/internal/session"
-	"github.com/gobravedev/opencode/internal/tui/components/chat"
-	"github.com/gobravedev/opencode/internal/tui/styles"
-	"github.com/gobravedev/opencode/internal/tui/theme"
-	"github.com/gobravedev/opencode/internal/tui/util"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/lsp"
+	"github.com/biox-dev/opencode/internal/lsp/protocol"
+	"github.com/biox-dev/opencode/internal/pubsub"
+	"github.com/biox-dev/opencode/internal/session"
+	"github.com/biox-dev/opencode/internal/tui/components/chat"
+	"github.com/biox-dev/opencode/internal/tui/styles"
+	"github.com/biox-dev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/tui/util"
 )
 
 type StatusCmp interface {

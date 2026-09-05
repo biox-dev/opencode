@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/llm/models"
 )
 
 type startupSetupStep int

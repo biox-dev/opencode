@@ -1,6 +1,6 @@
 package prompt
 
-import "github.com/gobravedev/opencode/internal/llm/models"
+import "github.com/biox-dev/opencode/internal/llm/models"
 
 func TitlePrompt(_ models.ModelProvider) string {
 	return `you will generate a short title based on the first message a user begins a conversation with

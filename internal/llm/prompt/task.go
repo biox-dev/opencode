@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gobravedev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/llm/models"
 )
 
 func TaskPrompt(_ models.ModelProvider) string {

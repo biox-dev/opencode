@@ -6,12 +6,12 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/message"
-	"github.com/gobravedev/opencode/internal/session"
-	"github.com/gobravedev/opencode/internal/tui/styles"
-	"github.com/gobravedev/opencode/internal/tui/theme"
-	"github.com/gobravedev/opencode/internal/version"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/session"
+	"github.com/biox-dev/opencode/internal/tui/styles"
+	"github.com/biox-dev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/version"
 )
 
 type SendMsg struct {
@@ -120,7 +120,7 @@ func logo(width int) string {
 }
 
 func repo(width int) string {
-	repo := "https://github.com/gobravedev/opencode"
+	repo := "https://github.com/biox-dev/opencode"
 	t := theme.CurrentTheme()
 
 	return styles.BaseStyle().

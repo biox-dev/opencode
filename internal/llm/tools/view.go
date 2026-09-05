@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/logging"
-	"github.com/gobravedev/opencode/internal/lsp"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/lsp"
 )
 
 type ViewParams struct {

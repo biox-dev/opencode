@@ -11,10 +11,10 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/fsnotify/fsnotify"
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/logging"
-	"github.com/gobravedev/opencode/internal/lsp"
-	"github.com/gobravedev/opencode/internal/lsp/protocol"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/lsp"
+	"github.com/biox-dev/opencode/internal/lsp/protocol"
 )
 
 // WorkspaceWatcher manages LSP file watching

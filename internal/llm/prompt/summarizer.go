@@ -1,6 +1,6 @@
 package prompt
 
-import "github.com/gobravedev/opencode/internal/llm/models"
+import "github.com/biox-dev/opencode/internal/llm/models"
 
 func SummarizerPrompt(_ models.ModelProvider) string {
 	return `You are a helpful AI assistant tasked with summarizing conversations.

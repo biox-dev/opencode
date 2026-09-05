@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/lsp"
-	"github.com/gobravedev/opencode/internal/lsp/protocol"
+	"github.com/biox-dev/opencode/internal/lsp"
+	"github.com/biox-dev/opencode/internal/lsp/protocol"
 )
 
 type DiagnosticsParams struct {

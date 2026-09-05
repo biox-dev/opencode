@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/logging"
 	"google.golang.org/genai"
 )
 

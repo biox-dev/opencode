@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gobravedev/opencode/internal/llm/models"
-	"github.com/gobravedev/opencode/internal/llm/tools"
-	"github.com/gobravedev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/llm/tools"
+	"github.com/biox-dev/opencode/internal/message"
 )
 
 type EventType string

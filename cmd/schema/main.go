@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/llm/models"
 )
 
 // JSONSchemaType represents a JSON Schema type

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/llm/models"
-	"github.com/gobravedev/opencode/internal/llm/tools"
-	"github.com/gobravedev/opencode/internal/skills"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/llm/tools"
+	"github.com/biox-dev/opencode/internal/skills"
 )
 
 func CoderPrompt(provider models.ModelProvider) string {

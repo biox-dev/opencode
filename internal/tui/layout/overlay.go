@@ -8,9 +8,9 @@ import (
 	"github.com/muesli/ansi"
 	"github.com/muesli/reflow/truncate"
 	"github.com/muesli/termenv"
-	"github.com/gobravedev/opencode/internal/tui/styles"
-	"github.com/gobravedev/opencode/internal/tui/theme"
-	"github.com/gobravedev/opencode/internal/tui/util"
+	"github.com/biox-dev/opencode/internal/tui/styles"
+	"github.com/biox-dev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/tui/util"
 )
 
 // Most of this code is borrowed from

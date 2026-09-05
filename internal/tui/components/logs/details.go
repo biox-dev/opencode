@@ -9,10 +9,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gobravedev/opencode/internal/logging"
-	"github.com/gobravedev/opencode/internal/tui/layout"
-	"github.com/gobravedev/opencode/internal/tui/styles"
-	"github.com/gobravedev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/tui/layout"
+	"github.com/biox-dev/opencode/internal/tui/styles"
+	"github.com/biox-dev/opencode/internal/tui/theme"
 )
 
 type DetailComponent interface {

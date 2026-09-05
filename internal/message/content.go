@@ -5,7 +5,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/llm/models"
 )
 
 type MessageRole string

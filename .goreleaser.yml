@@ -12,7 +12,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X github.com/gobravedev/opencode/internal/version.Version={{.Version}}
+      - -s -w -X github.com/biox-dev/opencode/internal/version.Version={{.Version}}
     main: ./main.go
 
 archives:
@@ -35,7 +35,7 @@ snapshot:
   name_template: "0.0.0-{{ .Timestamp }}"
 aurs:
   - name: opencode-ai
-    homepage: "https://github.com/gobravedev/opencode"
+    homepage: "https://github.com/biox-dev/opencode"
     description: "terminal based agent that can build anything"
     maintainers:
       - "kujtimiihoxha <kujtimii.h@gmail.com>"

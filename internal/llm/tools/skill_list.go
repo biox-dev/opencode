@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/skills"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/skills"
 )
 
 type SkillListParams struct {

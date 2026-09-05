@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/logging"
 	"github.com/spf13/viper"
 )
 

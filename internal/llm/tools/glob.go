@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/fileutil"
-	"github.com/gobravedev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/fileutil"
+	"github.com/biox-dev/opencode/internal/logging"
 )
 
 const (

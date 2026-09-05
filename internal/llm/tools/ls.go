@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gobravedev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/config"
 )
 
 type LSParams struct {

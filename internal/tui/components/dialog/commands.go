@@ -4,11 +4,11 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	utilComponents "github.com/gobravedev/opencode/internal/tui/components/util"
-	"github.com/gobravedev/opencode/internal/tui/layout"
-	"github.com/gobravedev/opencode/internal/tui/styles"
-	"github.com/gobravedev/opencode/internal/tui/theme"
-	"github.com/gobravedev/opencode/internal/tui/util"
+	utilComponents "github.com/biox-dev/opencode/internal/tui/components/util"
+	"github.com/biox-dev/opencode/internal/tui/layout"
+	"github.com/biox-dev/opencode/internal/tui/styles"
+	"github.com/biox-dev/opencode/internal/tui/theme"
+	"github.com/biox-dev/opencode/internal/tui/util"
 )
 
 // Command represents a command that can be executed

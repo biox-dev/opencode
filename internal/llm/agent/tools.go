@@ -3,12 +3,12 @@ package agent
 import (
 	"context"
 
-	"github.com/gobravedev/opencode/internal/history"
-	"github.com/gobravedev/opencode/internal/llm/tools"
-	"github.com/gobravedev/opencode/internal/lsp"
-	"github.com/gobravedev/opencode/internal/message"
-	"github.com/gobravedev/opencode/internal/permission"
-	"github.com/gobravedev/opencode/internal/session"
+	"github.com/biox-dev/opencode/internal/history"
+	"github.com/biox-dev/opencode/internal/llm/tools"
+	"github.com/biox-dev/opencode/internal/lsp"
+	"github.com/biox-dev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/permission"
+	"github.com/biox-dev/opencode/internal/session"
 )
 
 func CoderAgentTools(

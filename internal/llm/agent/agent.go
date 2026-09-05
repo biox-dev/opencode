@@ -8,16 +8,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gobravedev/opencode/internal/config"
-	"github.com/gobravedev/opencode/internal/llm/models"
-	"github.com/gobravedev/opencode/internal/llm/prompt"
-	"github.com/gobravedev/opencode/internal/llm/provider"
-	"github.com/gobravedev/opencode/internal/llm/tools"
-	"github.com/gobravedev/opencode/internal/logging"
-	"github.com/gobravedev/opencode/internal/message"
-	"github.com/gobravedev/opencode/internal/permission"
-	"github.com/gobravedev/opencode/internal/pubsub"
-	"github.com/gobravedev/opencode/internal/session"
+	"github.com/biox-dev/opencode/internal/config"
+	"github.com/biox-dev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/llm/prompt"
+	"github.com/biox-dev/opencode/internal/llm/provider"
+	"github.com/biox-dev/opencode/internal/llm/tools"
+	"github.com/biox-dev/opencode/internal/logging"
+	"github.com/biox-dev/opencode/internal/message"
+	"github.com/biox-dev/opencode/internal/permission"
+	"github.com/biox-dev/opencode/internal/pubsub"
+	"github.com/biox-dev/opencode/internal/session"
 )
 
 // Common errors
