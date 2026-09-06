@@ -237,17 +237,18 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 	if err != nil {
 		return a.err(fmt.Errorf("failed to list messages: %w", err))
 	}
-	if len(msgs) == 0 {
-		go func() {
-			defer logging.RecoverPanic("agent.Run", func() {
-				logging.ErrorPersist("panic while generating title")
-			})
-			titleErr := a.generateTitle(context.Background(), sessionID, content)
-			if titleErr != nil {
-				logging.ErrorPersist(fmt.Sprintf("failed to generate title: %v", titleErr))
-			}
-		}()
-	}
+	// TODO
+	// if len(msgs) == 0 {
+	// 	go func() {
+	// 		defer logging.RecoverPanic("agent.Run", func() {
+	// 			logging.ErrorPersist("panic while generating title")
+	// 		})
+	// 		titleErr := a.generateTitle(context.Background(), sessionID, content)
+	// 		if titleErr != nil {
+	// 			logging.ErrorPersist(fmt.Sprintf("failed to generate title: %v", titleErr))
+	// 		}
+	// 	}()
+	// }
 	session, err := a.sessions.Get(ctx, sessionID)
 	if err != nil {
 		return a.err(fmt.Errorf("failed to get session: %w", err))

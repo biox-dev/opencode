@@ -916,6 +916,55 @@ func Get() *Config {
 	return cfg
 }
 
+// Use sets the global configuration from a caller-provided config object.
+// It applies internal defaults and validations without reading config files.
+func Use(provided *Config) (*Config, error) {
+	if provided == nil {
+		return nil, fmt.Errorf("config is required")
+	}
+	if strings.TrimSpace(provided.WorkingDir) == "" {
+		return nil, fmt.Errorf("config working directory is required")
+	}
+
+	copyCfg := *provided
+	if copyCfg.Providers == nil {
+		copyCfg.Providers = make(map[models.ModelProvider]Provider)
+	}
+	if copyCfg.LSP == nil {
+		copyCfg.LSP = make(map[string]LSPConfig)
+	}
+	if copyCfg.MCPServers == nil {
+		copyCfg.MCPServers = make(map[string]MCPServer)
+	}
+	if copyCfg.Agents == nil {
+		copyCfg.Agents = make(map[AgentName]Agent)
+	}
+
+	cfg = &copyCfg
+	applyDefaultValues()
+
+	defaultLevel := slog.LevelInfo
+	if cfg.Debug {
+		defaultLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(logging.NewWriter(), &slog.HandlerOptions{
+		Level: defaultLevel,
+	}))
+	slog.SetDefault(logger)
+
+	if err := Validate(); err != nil {
+		return cfg, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	// Keep title agent max token behavior aligned with Load.
+	cfg.Agents[AgentTitle] = Agent{
+		Model:     cfg.Agents[AgentTitle].Model,
+		MaxTokens: 80,
+	}
+
+	return cfg, nil
+}
+
 // WorkingDirectory returns the current working directory from the configuration.
 func WorkingDirectory() string {
 	if cfg == nil {

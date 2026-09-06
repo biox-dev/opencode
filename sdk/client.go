@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/biox-dev/opencode/internal/config"
 	"github.com/biox-dev/opencode/internal/history"
 	llmagent "github.com/biox-dev/opencode/internal/llm/agent"
+	"github.com/biox-dev/opencode/internal/llm/models"
 	"github.com/biox-dev/opencode/internal/lsp"
 	"github.com/biox-dev/opencode/internal/message"
 	"github.com/biox-dev/opencode/internal/permission"
@@ -111,10 +111,28 @@ type RunResult struct {
 
 type StreamHandler func(event Event)
 
+type ProviderConfig struct {
+	APIKey   string
+	Disabled bool
+}
+
+type AgentConfig struct {
+	Model           string
+	MaxTokens       int64
+	ReasoningEffort string
+}
+
 type Options struct {
-	WorkingDir  string
-	Debug       bool
-	AutoApprove bool
+	WorkingDir      string
+	Debug           bool
+	Provider        string
+	APIKey          string
+	Model           string
+	MaxTokens       int64
+	ReasoningEffort string
+	Providers       map[string]ProviderConfig
+	Agents          map[string]AgentConfig
+	AutoApprove     bool
 }
 
 type Client struct {
@@ -133,17 +151,14 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	workingDir := strings.TrimSpace(opts.WorkingDir)
-	if workingDir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("resolve working directory: %w", err)
-		}
-		workingDir = cwd
+
+	runtimeCfg, err := buildRuntimeConfig(opts)
+	if err != nil {
+		return nil, err
 	}
 
-	if _, err := config.Load(workingDir, opts.Debug); err != nil {
-		return nil, fmt.Errorf("load opencode config: %w", err)
+	if _, err := config.Use(runtimeCfg); err != nil {
+		return nil, fmt.Errorf("use opencode config: %w", err)
 	}
 
 	appCtx, cancel := context.WithCancel(ctx)
@@ -180,6 +195,123 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 		history:     historySvc,
 		coderAgent:  agentSvc,
 	}, nil
+}
+
+func buildRuntimeConfig(opts Options) (*config.Config, error) {
+	workingDir := strings.TrimSpace(opts.WorkingDir)
+	if workingDir == "" {
+		return nil, errors.New("options working dir is required")
+	}
+
+	runtimeCfg := &config.Config{
+		WorkingDir: workingDir,
+		Debug:      opts.Debug,
+		Providers:  make(map[models.ModelProvider]config.Provider),
+		LSP:        make(map[string]config.LSPConfig),
+		MCPServers: make(map[string]config.MCPServer),
+		Agents:     make(map[config.AgentName]config.Agent),
+	}
+
+	if len(opts.Providers) > 0 || len(opts.Agents) > 0 {
+		if err := applyExplicitProviderAndAgentConfig(runtimeCfg, opts); err != nil {
+			return nil, err
+		}
+		return runtimeCfg, nil
+	}
+
+	modelID := models.ModelID(strings.TrimSpace(opts.Model))
+	if modelID == "" {
+		return nil, errors.New("options model is required")
+	}
+	modelInfo, ok := models.SupportedModels[modelID]
+	if !ok {
+		return nil, fmt.Errorf("unsupported model: %s", modelID)
+	}
+
+	provider := modelInfo.Provider
+	if p := strings.TrimSpace(opts.Provider); p != "" {
+		provider = models.ModelProvider(p)
+	}
+	runtimeCfg.Providers[provider] = config.Provider{APIKey: strings.TrimSpace(opts.APIKey)}
+
+	maxTokens := opts.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = modelInfo.DefaultMaxTokens
+	}
+	agentCfg := config.Agent{
+		Model:           modelID,
+		MaxTokens:       maxTokens,
+		ReasoningEffort: strings.TrimSpace(opts.ReasoningEffort),
+	}
+	runtimeCfg.Agents[config.AgentCoder] = agentCfg
+	runtimeCfg.Agents[config.AgentSummarizer] = agentCfg
+	runtimeCfg.Agents[config.AgentTask] = agentCfg
+	runtimeCfg.Agents[config.AgentTitle] = config.Agent{
+		Model:           modelID,
+		MaxTokens:       80,
+		ReasoningEffort: strings.TrimSpace(opts.ReasoningEffort),
+	}
+
+	return runtimeCfg, nil
+}
+
+func applyExplicitProviderAndAgentConfig(runtimeCfg *config.Config, opts Options) error {
+	for providerName, providerCfg := range opts.Providers {
+		name := models.ModelProvider(strings.TrimSpace(providerName))
+		if name == "" {
+			return errors.New("options providers contains an empty provider name")
+		}
+		runtimeCfg.Providers[name] = config.Provider{
+			APIKey:   strings.TrimSpace(providerCfg.APIKey),
+			Disabled: providerCfg.Disabled,
+		}
+	}
+
+	for agentName, agentCfg := range opts.Agents {
+		name := config.AgentName(strings.TrimSpace(agentName))
+		if name == "" {
+			return errors.New("options agents contains an empty agent name")
+		}
+		modelID := models.ModelID(strings.TrimSpace(agentCfg.Model))
+		if modelID == "" {
+			return fmt.Errorf("options agents[%s] model is required", agentName)
+		}
+		if _, ok := models.SupportedModels[modelID]; !ok {
+			return fmt.Errorf("options agents[%s] model is unsupported: %s", agentName, modelID)
+		}
+		runtimeCfg.Agents[name] = config.Agent{
+			Model:           modelID,
+			MaxTokens:       agentCfg.MaxTokens,
+			ReasoningEffort: strings.TrimSpace(agentCfg.ReasoningEffort),
+		}
+	}
+
+	if _, ok := runtimeCfg.Agents[config.AgentCoder]; !ok {
+		return errors.New("options agents must include coder")
+	}
+
+	for agentName, agentCfg := range runtimeCfg.Agents {
+		modelInfo, ok := models.SupportedModels[agentCfg.Model]
+		if !ok {
+			return fmt.Errorf("options agents[%s] model is unsupported: %s", agentName, agentCfg.Model)
+		}
+		if _, ok := runtimeCfg.Providers[modelInfo.Provider]; !ok {
+			return fmt.Errorf("provider config missing for agent %s model provider %s", agentName, modelInfo.Provider)
+		}
+	}
+
+	if _, ok := runtimeCfg.Agents[config.AgentTitle]; !ok {
+		coder := runtimeCfg.Agents[config.AgentCoder]
+		runtimeCfg.Agents[config.AgentTitle] = config.Agent{Model: coder.Model, MaxTokens: 80, ReasoningEffort: coder.ReasoningEffort}
+	}
+	if _, ok := runtimeCfg.Agents[config.AgentSummarizer]; !ok {
+		runtimeCfg.Agents[config.AgentSummarizer] = runtimeCfg.Agents[config.AgentCoder]
+	}
+	if _, ok := runtimeCfg.Agents[config.AgentTask]; !ok {
+		runtimeCfg.Agents[config.AgentTask] = runtimeCfg.Agents[config.AgentCoder]
+	}
+
+	return nil
 }
 
 func (c *Client) Close() error {
