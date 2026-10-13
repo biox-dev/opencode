@@ -14,6 +14,7 @@ import (
 	"github.com/biox-dev/opencode/internal/history"
 	llmagent "github.com/biox-dev/opencode/internal/llm/agent"
 	"github.com/biox-dev/opencode/internal/llm/models"
+	"github.com/biox-dev/opencode/internal/llm/tools"
 	"github.com/biox-dev/opencode/internal/lsp"
 	"github.com/biox-dev/opencode/internal/message"
 	"github.com/biox-dev/opencode/internal/permission"
@@ -102,6 +103,21 @@ type RunRequest struct {
 	SessionTitle string
 	Prompt       string
 	AutoApprove  bool
+
+	// System 可选：宿主系统提示词，作为真正的 system 消息注入到模型，
+	// 不进入对话历史，因此不会被反复追加为 user 内容。
+	System string
+	// History 可选：结构化历史对话（按时间顺序），不含本轮 Prompt，也不含 System。
+	// opencode 会把它作为已有会话消息加载，再追加本轮 Prompt。
+	History []InputMessage
+}
+
+// InputMessage 是种子历史中的一条对话消息。
+// 注意：opencode 的 provider 仅渲染 user / assistant / tool 三种历史角色，
+// system 请通过 RunRequest.System 传递。
+type InputMessage struct {
+	Role    Role
+	Content string
 }
 
 type RunResult struct {
@@ -136,6 +152,10 @@ type Options struct {
 
 	// PermissionHandler 可选：注入后，工具权限请求逐次委托给宿主决策。
 	PermissionHandler PermissionHandler
+
+	// Tools 可选：宿主注入的自定义工具，追加到 opencode 内置工具之后，与内置工具
+	// 共用同一套 tool-call 循环（模型可调用，opencode 负责回填结果）。
+	Tools []HostTool
 }
 
 type Client struct {
@@ -149,7 +169,11 @@ type Client struct {
 	sessions    session.Service
 	messages    message.Service
 	history     history.Service
+
+	// agentTools 与 coderAgent 缓存：coder agent 按 system 提示词按需构建并复用。
+	agentTools  []tools.BaseTool
 	coderAgent  llmagent.Service
+	agentSystem string
 }
 
 func NewClient(ctx context.Context, opts Options) (*Client, error) {
@@ -173,22 +197,15 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 	messagesSvc := newInMemoryMessageService()
 	historySvc := newInMemoryHistoryService()
 
-	agentSvc, err := llmagent.NewAgent(
-		config.AgentCoder,
+	agentTools := llmagent.CoderAgentTools(
+		permissionsSvc,
 		sessionsSvc,
 		messagesSvc,
-		llmagent.CoderAgentTools(
-			permissionsSvc,
-			sessionsSvc,
-			messagesSvc,
-			historySvc,
-			map[string]*lsp.Client{},
-		),
+		historySvc,
+		map[string]*lsp.Client{},
 	)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("create opencode agent: %w", err)
-	}
+	// 追加宿主注入的自定义工具，使其与内置工具共用同一套 tool-call 循环。
+	agentTools = append(agentTools, adaptHostTools(opts.Tools)...)
 
 	return &Client{
 		ctx:               appCtx,
@@ -199,7 +216,7 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 		sessions:          sessionsSvc,
 		messages:          messagesSvc,
 		history:           historySvc,
-		coderAgent:        agentSvc,
+		agentTools:        agentTools,
 	}, nil
 }
 
@@ -339,7 +356,7 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) CreateSession(ctx context.Context, title string) (*Session, error) {
-	if c == nil || c.coderAgent == nil {
+	if c == nil {
 		return nil, errors.New("opencode sdk client is not initialized")
 	}
 	if strings.TrimSpace(title) == "" {
@@ -353,8 +370,60 @@ func (c *Client) CreateSession(ctx context.Context, title string) (*Session, err
 	return &result, nil
 }
 
+// coderAgentFor 返回系统提示词与 system 匹配的 coder agent，按需构建并复用。
+// System 经此进入 provider 的 system 消息通道，而非混入 user 对话历史。
+func (c *Client) coderAgentFor(system string) (llmagent.Service, error) {
+	system = strings.TrimSpace(system)
+	if c.coderAgent != nil && c.agentSystem == system {
+		return c.coderAgent, nil
+	}
+	agentSvc, err := llmagent.NewAgent(
+		config.AgentCoder,
+		c.sessions,
+		c.messages,
+		c.agentTools,
+		llmagent.WithSystemPrompt(system),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create opencode agent: %w", err)
+	}
+	c.coderAgent = agentSvc
+	c.agentSystem = system
+	return agentSvc, nil
+}
+
+// seedHistory 把结构化历史按顺序写入 session 的 message store。
+func (c *Client) seedHistory(ctx context.Context, sessionID string, history []InputMessage) error {
+	for _, item := range history {
+		content := strings.TrimSpace(item.Content)
+		if content == "" {
+			continue
+		}
+		if _, err := c.messages.Create(ctx, sessionID, message.CreateMessageParams{
+			Role:  toMessageRole(item.Role),
+			Parts: []message.ContentPart{message.TextContent{Text: item.Content}},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func toMessageRole(role Role) message.MessageRole {
+	switch role {
+	case RoleSystem:
+		return message.System
+	case RoleAssistant:
+		return message.Assistant
+	case RoleTool:
+		return message.Tool
+	default:
+		return message.User
+	}
+}
+
 func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler StreamHandler) (*RunResult, error) {
-	if c == nil || c.coderAgent == nil {
+	if c == nil {
 		return nil, errors.New("opencode sdk client is not initialized")
 	}
 	if ctx == nil {
@@ -365,9 +434,20 @@ func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler 
 		return nil, errors.New("prompt is required")
 	}
 
+	agentSvc, err := c.coderAgentFor(req.System)
+	if err != nil {
+		return nil, err
+	}
+
 	sess, err := c.ensureSession(ctx, req)
 	if err != nil {
 		return nil, err
+	}
+
+	// 在发起本轮请求前，把结构化历史 seed 进 message store：
+	// opencode 在 Run 时会 List 出这些历史并 append 本轮 user 输入，从而保留 role / tool 结构。
+	if err := c.seedHistory(ctx, sess.ID, req.History); err != nil {
+		return nil, fmt.Errorf("seed history: %w", err)
 	}
 
 	shouldAutoApprove := c.autoApprove || req.AutoApprove
@@ -382,7 +462,7 @@ func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler 
 	}
 
 	messageSub := c.messages.Subscribe(ctx)
-	done, err := c.coderAgent.Run(ctx, sess.ID, prompt)
+	done, err := agentSvc.Run(ctx, sess.ID, prompt)
 	if err != nil {
 		return nil, err
 	}

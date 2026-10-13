@@ -67,7 +67,22 @@ type agent struct {
 	titleProvider     provider.Provider
 	summarizeProvider provider.Provider
 
+	extraSystemPrompt string
+
 	activeRequests sync.Map
+}
+
+// AgentOption 用于定制 agent 构造行为。
+type AgentOption func(*agentOptions)
+
+type agentOptions struct {
+	extraSystemPrompt string
+}
+
+// WithSystemPrompt 在 agent 的 provider 系统提示词末尾追加一段宿主系统提示词。
+// 它进入真正的 system 消息通道，不会作为 user 内容混入对话历史。
+func WithSystemPrompt(extra string) AgentOption {
+	return func(o *agentOptions) { o.extraSystemPrompt = strings.TrimSpace(extra) }
 }
 
 func NewAgent(
@@ -75,22 +90,27 @@ func NewAgent(
 	sessions session.Service,
 	messages message.Service,
 	agentTools []tools.BaseTool,
+	options ...AgentOption,
 ) (Service, error) {
-	agentProvider, err := createAgentProvider(agentName)
+	var opts agentOptions
+	for _, option := range options {
+		option(&opts)
+	}
+	agentProvider, err := createAgentProvider(agentName, opts.extraSystemPrompt)
 	if err != nil {
 		return nil, err
 	}
 	var titleProvider provider.Provider
 	// Only generate titles for the coder agent
 	if agentName == config.AgentCoder {
-		titleProvider, err = createAgentProvider(config.AgentTitle)
+		titleProvider, err = createAgentProvider(config.AgentTitle, "")
 		if err != nil {
 			return nil, err
 		}
 	}
 	var summarizeProvider provider.Provider
 	if agentName == config.AgentCoder {
-		summarizeProvider, err = createAgentProvider(config.AgentSummarizer)
+		summarizeProvider, err = createAgentProvider(config.AgentSummarizer, "")
 		if err != nil {
 			return nil, err
 		}
@@ -104,6 +124,7 @@ func NewAgent(
 		tools:             agentTools,
 		titleProvider:     titleProvider,
 		summarizeProvider: summarizeProvider,
+		extraSystemPrompt: opts.extraSystemPrompt,
 		activeRequests:    sync.Map{},
 	}
 
@@ -523,7 +544,7 @@ func (a *agent) Update(agentName config.AgentName, modelID models.ModelID) (mode
 		return models.Model{}, fmt.Errorf("failed to update config: %w", err)
 	}
 
-	provider, err := createAgentProvider(agentName)
+	provider, err := createAgentProvider(agentName, a.extraSystemPrompt)
 	if err != nil {
 		return models.Model{}, fmt.Errorf("failed to create provider for model %s: %w", modelID, err)
 	}
@@ -704,7 +725,7 @@ func (a *agent) Summarize(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-func createAgentProvider(agentName config.AgentName) (provider.Provider, error) {
+func createAgentProvider(agentName config.AgentName, extraSystemPrompt string) (provider.Provider, error) {
 	cfg := config.Get()
 	agentConfig, ok := cfg.Agents[agentName]
 	if !ok && agentName != config.AgentCoder {
@@ -736,10 +757,14 @@ func createAgentProvider(agentName config.AgentName) (provider.Provider, error) 
 	if agentConfig.MaxTokens > 0 {
 		maxTokens = agentConfig.MaxTokens
 	}
+	systemMessage := prompt.GetAgentPrompt(agentName, model.Provider)
+	if extra := strings.TrimSpace(extraSystemPrompt); extra != "" {
+		systemMessage = systemMessage + "\n\n" + extra
+	}
 	opts := []provider.ProviderClientOption{
 		provider.WithAPIKey(providerCfg.APIKey),
 		provider.WithModel(model),
-		provider.WithSystemMessage(prompt.GetAgentPrompt(agentName, model.Provider)),
+		provider.WithSystemMessage(systemMessage),
 		provider.WithMaxTokens(maxTokens),
 	}
 	if model.Provider == models.ProviderOpenAI || model.Provider == models.ProviderLocal && model.CanReason {
