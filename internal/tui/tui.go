@@ -7,9 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/biox-dev/opencode/internal/app"
 	"github.com/biox-dev/opencode/internal/config"
 	"github.com/biox-dev/opencode/internal/llm/agent"
@@ -26,6 +23,9 @@ import (
 	"github.com/biox-dev/opencode/internal/tui/page"
 	"github.com/biox-dev/opencode/internal/tui/theme"
 	"github.com/biox-dev/opencode/internal/tui/util"
+	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type keyMap struct {
@@ -309,21 +309,23 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case startCompactSessionMsg:
-		// Start compacting the current session
-		a.isCompacting = true
-		a.compactingMessage = "Starting summarization..."
-
-		if a.selectedSession.ID == "" {
-			a.isCompacting = false
-			return a, util.ReportWarn("No active session to summarize")
-		}
-
-		// Start the summarization process
-		return a, func() tea.Msg {
-			ctx := context.Background()
-			a.app.CoderAgent.Summarize(ctx, a.selectedSession.ID)
-			return nil
-		}
+		// Summarize 已禁用（Service 接口已移除 Summarize），compact 相关调用暂时注释。
+		// // Start compacting the current session
+		// a.isCompacting = true
+		// a.compactingMessage = "Starting summarization..."
+		//
+		// if a.selectedSession.ID == "" {
+		// 	a.isCompacting = false
+		// 	return a, util.ReportWarn("No active session to summarize")
+		// }
+		//
+		// // Start the summarization process
+		// return a, func() tea.Msg {
+		// 	ctx := context.Background()
+		// 	a.app.CoderAgent.Summarize(ctx, a.selectedSession.ID)
+		// 	return nil
+		// }
+		return a, nil
 
 	case pubsub.Event[agent.AgentEvent]:
 		payload := msg.Payload
@@ -334,10 +336,12 @@ func (a appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		a.compactingMessage = payload.Progress
 
-		if payload.Done && payload.Type == agent.AgentEventTypeSummarize {
-			a.isCompacting = false
-			return a, util.ReportInfo("Session summarization complete")
-		} else if payload.Done && payload.Type == agent.AgentEventTypeResponse && a.selectedSession.ID != "" {
+		// AgentEventTypeSummarize 处理已注释（Summarize 已禁用）。
+		// if payload.Done && payload.Type == agent.AgentEventTypeSummarize {
+		// 	a.isCompacting = false
+		// 	return a, util.ReportInfo("Session summarization complete")
+		// } else if payload.Done && payload.Type == agent.AgentEventTypeResponse && a.selectedSession.ID != "" {
+		if payload.Done && payload.Type == agent.AgentEventTypeResponse && a.selectedSession.ID != "" {
 			model := a.app.CoderAgent.Model()
 			contextWindow := model.ContextWindow
 			tokens := a.selectedSession.CompletionTokens + a.selectedSession.PromptTokens

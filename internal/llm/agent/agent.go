@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
+
+	// "time" // titleProvider / summarizeProvider 相关逻辑已注释，暂不需要 time 包
 
 	"github.com/biox-dev/opencode/internal/config"
 	"github.com/biox-dev/opencode/internal/llm/models"
@@ -53,7 +54,8 @@ type Service interface {
 	IsSessionBusy(sessionID string) bool
 	IsBusy() bool
 	Update(agentName config.AgentName, modelID models.ModelID) (models.Model, error)
-	Summarize(ctx context.Context, sessionID string) error
+	// Summarize 已从接口移除：opencode 作为 gobrave 的类库使用时仅提供 agent 调用（Run）能力。
+	// Summarize(ctx context.Context, sessionID string) error
 }
 
 type agent struct {
@@ -64,8 +66,10 @@ type agent struct {
 	tools    []tools.BaseTool
 	provider provider.Provider
 
-	titleProvider     provider.Provider
-	summarizeProvider provider.Provider
+	// titleProvider / summarizeProvider 相关能力已暂时注释。
+	// opencode 后续作为 gobrave 的类库使用时，仅保留 agent 调用（Run）能力。
+	// titleProvider     provider.Provider
+	// summarizeProvider provider.Provider
 
 	extraSystemPrompt string
 
@@ -100,30 +104,31 @@ func NewAgent(
 	if err != nil {
 		return nil, err
 	}
-	var titleProvider provider.Provider
-	// Only generate titles for the coder agent
-	if agentName == config.AgentCoder {
-		titleProvider, err = createAgentProvider(config.AgentTitle, "")
-		if err != nil {
-			return nil, err
-		}
-	}
-	var summarizeProvider provider.Provider
-	if agentName == config.AgentCoder {
-		summarizeProvider, err = createAgentProvider(config.AgentSummarizer, "")
-		if err != nil {
-			return nil, err
-		}
-	}
+	// titleProvider / summarizeProvider 相关初始化已暂时注释。
+	// var titleProvider provider.Provider
+	// // Only generate titles for the coder agent
+	// if agentName == config.AgentCoder {
+	// 	titleProvider, err = createAgentProvider(config.AgentTitle, "")
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	// var summarizeProvider provider.Provider
+	// if agentName == config.AgentCoder {
+	// 	summarizeProvider, err = createAgentProvider(config.AgentSummarizer, "")
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
 	agent := &agent{
-		Broker:            pubsub.NewBroker[AgentEvent](),
-		provider:          agentProvider,
-		messages:          messages,
-		sessions:          sessions,
-		tools:             agentTools,
-		titleProvider:     titleProvider,
-		summarizeProvider: summarizeProvider,
+		Broker:   pubsub.NewBroker[AgentEvent](),
+		provider: agentProvider,
+		messages: messages,
+		sessions: sessions,
+		tools:    agentTools,
+		// titleProvider:     titleProvider,
+		// summarizeProvider: summarizeProvider,
 		extraSystemPrompt: opts.extraSystemPrompt,
 		activeRequests:    sync.Map{},
 	}
@@ -172,6 +177,9 @@ func (a *agent) IsSessionBusy(sessionID string) bool {
 	return busy
 }
 
+// generateTitle 依赖 titleProvider，已暂时注释。
+// 如需恢复，请取消下面的块注释，并在 agent 结构体 / NewAgent 中恢复 titleProvider。
+/*
 func (a *agent) generateTitle(ctx context.Context, sessionID string, content string) error {
 	if content == "" {
 		return nil
@@ -208,6 +216,7 @@ func (a *agent) generateTitle(ctx context.Context, sessionID string, content str
 	_, err = a.sessions.Save(ctx, session)
 	return err
 }
+*/
 
 func (a *agent) err(err error) AgentEvent {
 	return AgentEvent{
@@ -554,7 +563,11 @@ func (a *agent) Update(agentName config.AgentName, modelID models.ModelID) (mode
 	return a.provider.Model(), nil
 }
 
-func (a *agent) Summarize(ctx context.Context, sessionID string) error {
+// Summarize 已从 Service 接口移除并禁用：opencode 作为 gobrave 的类库使用时仅提供 agent 调用（Run）能力。
+// 如需恢复，请取消下面的注释，并在 Service 接口 / agent 结构体 / NewAgent 中恢复 summarizeProvider。
+// func (a *agent) Summarize(ctx context.Context, sessionID string) error {
+// 	return fmt.Errorf("summarize is disabled")
+/*
 	if a.summarizeProvider == nil {
 		return fmt.Errorf("summarize provider not available")
 	}
@@ -723,7 +736,8 @@ func (a *agent) Summarize(ctx context.Context, sessionID string) error {
 	}()
 
 	return nil
-}
+*/
+// }
 
 func createAgentProvider(agentName config.AgentName, extraSystemPrompt string) (provider.Provider, error) {
 	cfg := config.Get()

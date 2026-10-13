@@ -12,7 +12,8 @@ import (
 	"github.com/biox-dev/opencode/internal/config"
 	"github.com/biox-dev/opencode/internal/llm/models"
 	"github.com/biox-dev/opencode/internal/llm/tools"
-	"github.com/biox-dev/opencode/internal/skills"
+	// skills 导入已注释：技能提示词由 gobrave 侧统一注入（见下方说明）。
+	// "github.com/biox-dev/opencode/internal/skills"
 )
 
 func CoderPrompt(provider models.ModelProvider) string {
@@ -22,10 +23,12 @@ func CoderPrompt(provider models.ModelProvider) string {
 		basePrompt = baseOpenAICoderPrompt
 	}
 	envInfo := getEnvironmentInfo()
-	skillsInfo := skillsInformation()
+	// skills 提示词片段已注释：opencode 作为 gobrave 类库使用时，技能元信息由
+	// gobrave/internal/agent/skill 统一注入系统提示词，此处避免重复注入冲突。
+	// skillsInfo := skillsInformation()
 	lspInfo := lspInformation()
 
-	sections := []string{basePrompt, envInfo, lspInfo, skillsInfo}
+	sections := []string{basePrompt, envInfo, lspInfo}
 	nonEmpty := make([]string, 0, len(sections))
 	for _, section := range sections {
 		if strings.TrimSpace(section) != "" {
@@ -226,14 +229,17 @@ Tools that support it will also include useful diagnostics such as linting and t
 `
 }
 
-func skillsInformation() string {
-	paths, err := skills.DefaultPaths(config.WorkingDirectory())
-	if err != nil {
-		return ""
-	}
-
-	return skills.BuildPromptSection(paths)
-}
+// skillsInformation 已注释：技能注入改由 gobrave/internal/agent/skill 负责，
+// 避免 opencode 作为类库使用时与宿主重复注入技能信息。
+//
+// func skillsInformation() string {
+// 	paths, err := skills.DefaultPaths(config.WorkingDirectory())
+// 	if err != nil {
+// 		return ""
+// 	}
+//
+// 	return skills.BuildPromptSection(paths)
+// }
 
 func boolToYesNo(b bool) string {
 	if b {
