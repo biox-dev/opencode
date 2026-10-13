@@ -10,14 +10,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/shared"
 	"github.com/biox-dev/opencode/internal/config"
 	"github.com/biox-dev/opencode/internal/llm/models"
 	toolsPkg "github.com/biox-dev/opencode/internal/llm/tools"
 	"github.com/biox-dev/opencode/internal/logging"
 	"github.com/biox-dev/opencode/internal/message"
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
 )
 
 type copilotOptions struct {
@@ -423,6 +423,12 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 				}
 
 				for _, choice := range chunk.Choices {
+					if reasoning := reasoningDelta(choice.Delta); reasoning != "" {
+						eventChan <- ProviderEvent{
+							Type:     EventThinkingDelta,
+							Thinking: reasoning,
+						}
+					}
 					if choice.Delta.Content != "" {
 						eventChan <- ProviderEvent{
 							Type:    EventContentDelta,
@@ -668,4 +674,3 @@ func WithCopilotBearerToken(bearerToken string) CopilotOption {
 		options.bearerToken = bearerToken
 	}
 }
-

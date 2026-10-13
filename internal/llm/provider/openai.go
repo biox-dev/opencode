@@ -8,14 +8,14 @@ import (
 	"io"
 	"time"
 
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
-	"github.com/openai/openai-go/shared"
 	"github.com/biox-dev/opencode/internal/config"
 	"github.com/biox-dev/opencode/internal/llm/models"
 	"github.com/biox-dev/opencode/internal/llm/tools"
 	"github.com/biox-dev/opencode/internal/logging"
 	"github.com/biox-dev/opencode/internal/message"
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
+	"github.com/openai/openai-go/shared"
 )
 
 type openaiOptions struct {
@@ -270,6 +270,12 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 				acc.AddChunk(chunk)
 
 				for _, choice := range chunk.Choices {
+					if reasoning := reasoningDelta(choice.Delta); reasoning != "" {
+						eventChan <- ProviderEvent{
+							Type:     EventThinkingDelta,
+							Thinking: reasoning,
+						}
+					}
 					if choice.Delta.Content != "" {
 						eventChan <- ProviderEvent{
 							Type:    EventContentDelta,
@@ -332,6 +338,35 @@ func (o *openaiClient) stream(ctx context.Context, messages []message.Message, t
 	}()
 
 	return eventChan
+}
+
+// reasoningDelta extracts a reasoning/thinking delta from the non-standard
+// streaming fields used by OpenAI-compatible reasoning models. DeepSeek and
+// similar providers send "reasoning_content", while some OpenAI models use
+// "reasoning". These are not part of the openai-go typed struct, so they are
+// read from the chunk's extra JSON fields.
+//
+// Note: do not gate on field.IsPresent(). The SDK marks these non-standard
+// fields as "invalid" (it cannot map them to a typed extra field), so
+// IsPresent() is false even though Raw() still holds the raw JSON value.
+func reasoningDelta(delta openai.ChatCompletionChunkChoiceDelta) string {
+	for _, key := range []string{"reasoning_content", "reasoning"} {
+		field, ok := delta.JSON.ExtraFields[key]
+		if !ok {
+			continue
+		}
+		raw := field.Raw()
+		if raw == "" || raw == "null" {
+			continue
+		}
+		var value string
+		if err := json.Unmarshal([]byte(raw), &value); err != nil {
+			// Not a JSON string; skip rather than emit malformed data.
+			continue
+		}
+		return value
+	}
+	return ""
 }
 
 func (o *openaiClient) shouldRetry(attempts int, err error) (bool, int64, error) {

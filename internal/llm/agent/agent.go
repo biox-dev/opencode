@@ -453,7 +453,7 @@ func (a *agent) processEvent(ctx context.Context, sessionID string, assistantMsg
 
 	switch event.Type {
 	case provider.EventThinkingDelta:
-		assistantMsg.AppendReasoningContent(event.Content)
+		assistantMsg.AppendReasoningContent(event.Thinking)
 		return a.messages.Update(ctx, *assistantMsg)
 	case provider.EventContentDelta:
 		assistantMsg.AppendContent(event.Content)
