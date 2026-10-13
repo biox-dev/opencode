@@ -133,12 +133,17 @@ type Options struct {
 	Providers       map[string]ProviderConfig
 	Agents          map[string]AgentConfig
 	AutoApprove     bool
+
+	// PermissionHandler 可选：注入后，工具权限请求逐次委托给宿主决策。
+	PermissionHandler PermissionHandler
 }
 
 type Client struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	autoApprove bool
+
+	permissionHandler PermissionHandler
 
 	permissions permission.Service
 	sessions    session.Service
@@ -163,7 +168,7 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 
 	appCtx, cancel := context.WithCancel(ctx)
 
-	permissionsSvc := permission.NewPermissionService()
+	permissionsSvc := permission.NewPermissionService(toInternalPermissionHandler(opts.PermissionHandler))
 	sessionsSvc := newInMemorySessionService()
 	messagesSvc := newInMemoryMessageService()
 	historySvc := newInMemoryHistoryService()
@@ -186,14 +191,15 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 	}
 
 	return &Client{
-		ctx:         appCtx,
-		cancel:      cancel,
-		autoApprove: opts.AutoApprove,
-		permissions: permissionsSvc,
-		sessions:    sessionsSvc,
-		messages:    messagesSvc,
-		history:     historySvc,
-		coderAgent:  agentSvc,
+		ctx:               appCtx,
+		cancel:            cancel,
+		autoApprove:       opts.AutoApprove,
+		permissionHandler: opts.PermissionHandler,
+		permissions:       permissionsSvc,
+		sessions:          sessionsSvc,
+		messages:          messagesSvc,
+		history:           historySvc,
+		coderAgent:        agentSvc,
 	}, nil
 }
 
@@ -365,7 +371,9 @@ func (c *Client) SendMessageStream(ctx context.Context, req RunRequest, handler 
 	}
 
 	shouldAutoApprove := c.autoApprove || req.AutoApprove
-	if shouldAutoApprove {
+	// 仅在未注入权限委托时才使用会话级自动放行；
+	// 有委托时逐次交给宿主决策（如 gobrave Runtime.RequestPermission）。
+	if shouldAutoApprove && c.permissionHandler == nil {
 		c.permissions.AutoApproveSession(sess.ID)
 	}
 
