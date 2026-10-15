@@ -204,8 +204,9 @@ func NewClient(ctx context.Context, opts Options) (*Client, error) {
 		historySvc,
 		map[string]*lsp.Client{},
 	)
-	// 追加宿主注入的自定义工具，使其与内置工具共用同一套 tool-call 循环。
-	agentTools = append(agentTools, adaptHostTools(opts.Tools)...)
+	// 追加宿主注入的自定义工具，使其与内置工具共用同一套 tool-call 循环；
+	// 声明了 Permission 的宿主工具会走与内置工具一致的权限门禁。
+	agentTools = append(agentTools, adaptHostTools(opts.Tools, permissionsSvc)...)
 
 	return &Client{
 		ctx:               appCtx,
